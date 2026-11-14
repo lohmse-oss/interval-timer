@@ -25,6 +25,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -97,33 +99,34 @@ fun HomeScreen(
             item {
                 Text("Intervall-Timer", fontSize = 30.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
-                Text("Wähle ein Training oder erstelle ein neues.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Training antippen zum Starten.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             items(workouts, key = { it.id }) { w ->
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(w.name, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            buildString {
-                                if (w.sets > 1) append("${w.sets} Sätze × ")
-                                append("${w.intervals} Intervalle")
-                                append(" · Intervall ${formatTime(w.intervalSeconds)}")
-                            },
-                        )
-                        Text(
-                            "Gesamt ${formatTime(w.totalSeconds)}  ·  " +
-                                w.segments.joinToString(" / ") { "${it.name} ${it.seconds}s" },
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 13.sp,
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Button(onClick = { onStart(w) }) { Text("Start") }
-                            Spacer(Modifier.weight(1f))
-                            TextButton(onClick = { onEdit(w) }) { Text("Bearbeiten") }
-                            TextButton(onClick = { onDuplicate(w) }) { Text("Kopie") }
-                            TextButton(onClick = { toDelete = w }) { Text("Löschen") }
+                var menu by remember { mutableStateOf(false) }
+                Card(onClick = { onStart(w) }, modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(w.name, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                buildString {
+                                    if (w.sets > 1) append("${w.sets} Sätze × ")
+                                    append("${w.intervals} Intervalle · Gesamt ${formatTime(w.totalSeconds)}")
+                                },
+                            )
+                            Text(
+                                w.segments.joinToString(" / ") { "${it.displayName} ${it.seconds}s" },
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 13.sp,
+                            )
+                        }
+                        Box {
+                            TextButton(onClick = { menu = true }) { Text("⋮", fontSize = 22.sp) }
+                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                DropdownMenuItem(text = { Text("Bearbeiten") }, onClick = { menu = false; onEdit(w) })
+                                DropdownMenuItem(text = { Text("Kopieren") }, onClick = { menu = false; onDuplicate(w) })
+                                DropdownMenuItem(text = { Text("Löschen") }, onClick = { menu = false; toDelete = w })
+                            }
                         }
                     }
                 }
@@ -187,6 +190,10 @@ private fun NumberField(
 @Composable
 fun EditorScreen(initial: Workout, onSave: (Workout) -> Unit, onCancel: () -> Unit) {
     var w by remember { mutableStateOf(initial) }
+    // „Einfach“ = genau eine Übung gefolgt von einer Pause – dann reichen zwei Zeitfelder.
+    val simple = w.segments.size == 2 &&
+        w.segments[0].type == SegmentType.WORK && w.segments[1].type == SegmentType.REST
+    var advanced by remember { mutableStateOf(!simple || initial.sets > 1) }
     val valid = w.name.isNotBlank() && w.segments.isNotEmpty() && w.intervalSeconds > 0 &&
         w.intervals >= 1 && w.sets >= 1
 
@@ -217,59 +224,85 @@ fun EditorScreen(initial: Workout, onSave: (Workout) -> Unit, onCancel: () -> Un
                 label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
             )
 
-            Text("Ablauf", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-            NumberField("Sätze", w.sets, { w = w.copy(sets = it) }, min = 1, max = 99)
-            NumberField("Intervalle pro Satz", w.intervals, { w = w.copy(intervals = it) }, min = 1, max = 999)
-            if (w.sets > 1) {
-                NumberField("Pause zwischen Sätzen (s)", w.setRestSeconds, { w = w.copy(setRestSeconds = it) })
+            if (simple) {
+                NumberField("Übung (s)", w.segments[0].seconds,
+                    { v -> w = w.copy(segments = w.segments.replaceAt(0, w.segments[0].copy(seconds = v))) }, min = 1)
+                NumberField("Pause (s)", w.segments[1].seconds,
+                    { v -> w = w.copy(segments = w.segments.replaceAt(1, w.segments[1].copy(seconds = v))) }, min = 1)
             }
-            NumberField("Vorbereitung (s)", w.prepSeconds, { w = w.copy(prepSeconds = it) })
-            NumberField("Cooldown am Ende (s)", w.cooldownSeconds, { w = w.copy(cooldownSeconds = it) })
-            NumberField("Countdown-Piepser (letzte s)", w.countdownSeconds, { w = w.copy(countdownSeconds = it) }, max = 30)
+            NumberField("Intervalle", w.intervals, { w = w.copy(intervals = it) }, min = 1, max = 999)
 
-            Text("Segmente pro Intervall", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-            w.segments.forEachIndexed { i, seg ->
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = seg.name,
-                            onValueChange = { v -> w = w.copy(segments = w.segments.replaceAt(i, seg.copy(name = v))) },
-                            label = { Text("Bezeichnung") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                        )
-                        NumberField(
-                            "Dauer (s)", seg.seconds,
-                            { v -> w = w.copy(segments = w.segments.replaceAt(i, seg.copy(seconds = v))) },
-                            min = 1,
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(
-                                selected = seg.type == SegmentType.WORK,
-                                onClick = { w = w.copy(segments = w.segments.replaceAt(i, seg.copy(type = SegmentType.WORK))) },
-                                label = { Text("Übung (rot)") },
-                            )
-                            FilterChip(
-                                selected = seg.type == SegmentType.REST,
-                                onClick = { w = w.copy(segments = w.segments.replaceAt(i, seg.copy(type = SegmentType.REST))) },
-                                label = { Text("Pause (grün)") },
-                            )
-                            Spacer(Modifier.weight(1f))
-                            TextButton(onClick = { w = w.copy(segments = w.segments.moveBy(i, -1)) }, enabled = i > 0) { Text("▲") }
-                            TextButton(onClick = { w = w.copy(segments = w.segments.moveBy(i, +1)) }, enabled = i < w.segments.lastIndex) { Text("▼") }
-                            TextButton(
-                                onClick = { w = w.copy(segments = w.segments.filterIndexed { j, _ -> j != i }) },
-                                enabled = w.segments.size > 1,
-                            ) { Text("✕") }
+            TextButton(onClick = { advanced = !advanced }) {
+                Text(if (advanced) "Erweitert ▾" else "Erweitert ▸", fontSize = 16.sp)
+            }
+
+            if (advanced) {
+                NumberField("Sätze", w.sets, { w = w.copy(sets = it) }, min = 1, max = 99)
+                if (w.sets > 1) {
+                    NumberField("Pause zwischen Sätzen (s)", w.setRestSeconds, { w = w.copy(setRestSeconds = it) })
+                }
+                NumberField("Vorbereitung (s)", w.prepSeconds, { w = w.copy(prepSeconds = it) })
+                NumberField("Cooldown am Ende (s)", w.cooldownSeconds, { w = w.copy(cooldownSeconds = it) })
+                NumberField("Countdown-Piepser (letzte s)", w.countdownSeconds, { w = w.copy(countdownSeconds = it) }, max = 30)
+
+                Text("Segmente pro Intervall", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Hier kannst du mehrere Übungen und Pausen hintereinander legen. Ohne Namen heißen sie „Übung“ bzw. „Pause“.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp,
+                )
+                w.segments.forEachIndexed { i, seg ->
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                OutlinedTextField(
+                                    value = seg.name,
+                                    onValueChange = { v -> w = w.copy(segments = w.segments.replaceAt(i, seg.copy(name = v))) },
+                                    label = { Text("Name (optional)") },
+                                    placeholder = { Text(seg.displayName) },
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                TextButton(
+                                    onClick = { w = w.copy(segments = w.segments.moveBy(i, -1)) },
+                                    enabled = i > 0, contentPadding = PaddingValues(0.dp), modifier = Modifier.size(40.dp),
+                                ) { Text("▲") }
+                                TextButton(
+                                    onClick = { w = w.copy(segments = w.segments.moveBy(i, +1)) },
+                                    enabled = i < w.segments.lastIndex, contentPadding = PaddingValues(0.dp), modifier = Modifier.size(40.dp),
+                                ) { Text("▼") }
+                                TextButton(
+                                    onClick = { w = w.copy(segments = w.segments.filterIndexed { j, _ -> j != i }) },
+                                    enabled = w.segments.size > 1, contentPadding = PaddingValues(0.dp), modifier = Modifier.size(40.dp),
+                                ) { Text("✕") }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                FilterChip(
+                                    selected = seg.type == SegmentType.WORK,
+                                    onClick = { w = w.copy(segments = w.segments.replaceAt(i, seg.copy(type = SegmentType.WORK))) },
+                                    label = { Text("Übung") },
+                                )
+                                FilterChip(
+                                    selected = seg.type == SegmentType.REST,
+                                    onClick = { w = w.copy(segments = w.segments.replaceAt(i, seg.copy(type = SegmentType.REST))) },
+                                    label = { Text("Pause") },
+                                )
+                                NumberField(
+                                    "Sek.", seg.seconds,
+                                    { v -> w = w.copy(segments = w.segments.replaceAt(i, seg.copy(seconds = v))) },
+                                    modifier = Modifier.weight(1f), min = 1,
+                                )
+                            }
                         }
                     }
                 }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = {
-                    w = w.copy(segments = w.segments + Segment("Übung", 30, SegmentType.WORK))
-                }) { Text("+ Übung") }
-                OutlinedButton(onClick = {
-                    w = w.copy(segments = w.segments + Segment("Pause", 10, SegmentType.REST))
-                }) { Text("+ Pause") }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = {
+                        w = w.copy(segments = w.segments + Segment("", 30, SegmentType.WORK))
+                    }) { Text("+ Übung") }
+                    OutlinedButton(onClick = {
+                        w = w.copy(segments = w.segments + Segment("", 10, SegmentType.REST))
+                    }) { Text("+ Pause") }
+                }
             }
             Spacer(Modifier.height(8.dp))
         }

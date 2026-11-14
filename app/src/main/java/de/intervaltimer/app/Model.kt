@@ -9,7 +9,11 @@ data class Segment(
     val name: String,
     val seconds: Int,
     val type: SegmentType,
-)
+) {
+    /** Leerer Name → „Übung“ bzw. „Pause“. */
+    val displayName: String
+        get() = name.trim().ifBlank { if (type == SegmentType.WORK) "Übung" else "Pause" }
+}
 
 /**
  * Ein Training besteht aus [sets] Sätzen. Jeder Satz hat [intervals] Intervalle,
@@ -99,7 +103,7 @@ fun buildPhases(w: Workout): List<Phase> {
                 if (seg.seconds <= 0) continue
                 out += Phase(
                     if (seg.type == SegmentType.WORK) PhaseKind.WORK else PhaseKind.REST,
-                    seg.name, seg.seconds, s, i,
+                    seg.displayName, seg.seconds, s, i,
                 )
             }
         }
