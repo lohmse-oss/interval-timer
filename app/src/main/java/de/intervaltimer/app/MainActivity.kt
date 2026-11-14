@@ -36,6 +36,7 @@ class MainActivity : ComponentActivity() {
 
 private sealed interface Screen {
     data object Home : Screen
+    data object History : Screen
     data class Edit(val workout: Workout, val isNew: Boolean) : Screen
 }
 
@@ -80,6 +81,7 @@ private fun App() {
         Screen.Home -> HomeScreen(
             workouts = workouts,
             onStart = ::startWorkout,
+            onHistory = { screen = Screen.History },
             onEdit = { screen = Screen.Edit(it, isNew = false) },
             onNew = {
                 val id = (workouts.maxOfOrNull { it.id } ?: 0L) + 1
@@ -90,6 +92,12 @@ private fun App() {
                 persist(workouts + w.copy(id = id, name = w.name + " (Kopie)"))
             },
             onDelete = { w -> persist(workouts.filterNot { it.id == w.id }) },
+        )
+        Screen.History -> HistoryScreen(
+            storage = storage,
+            existingWorkoutIds = workouts.map { it.id }.toSet(),
+            onBack = { screen = Screen.Home },
+            onRepeat = { id -> workouts.firstOrNull { it.id == id }?.let(::startWorkout) },
         )
         is Screen.Edit -> {
             BackHandler { screen = Screen.Home }

@@ -117,6 +117,7 @@ fun TimerScreen(state: RunState, storage: Storage) {
     val (top, bottom) = if (state.finished) Color(0xFF334155) to Color(0xFF0F172A) else phase.kind.gradient()
     val totalMs = remember(state.phases) { state.phases.sumOf { it.seconds * 1000L }.coerceAtLeast(1) }
     val secs = ((state.remainingMs + 999) / 1000).toInt()
+    val streak = remember(state.finished) { if (state.finished) computeStreak(storage.loadHistory()) else 0 }
 
     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(top, bottom)))) {
         Column(
@@ -138,6 +139,10 @@ fun TimerScreen(state: RunState, storage: Storage) {
                     if (w.sets > 1) Pill(Ico.Repeat, "${w.sets} Sätze")
                     Pill(Ico.Dumbbell, "${w.sets * w.intervals} Intervalle")
                     Pill(Ico.Timer, formatTime(w.totalSeconds))
+                }
+                if (streak >= 2) {
+                    Spacer(Modifier.height(14.dp))
+                    Pill(Ico.Flame, "$streak Tage in Folge")
                 }
                 Spacer(Modifier.weight(1f))
                 Button(

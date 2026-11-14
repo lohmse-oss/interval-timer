@@ -65,6 +65,9 @@ class TimerService : Service() {
     private var changeCount = 0
     private var lastTickSec = -1
     private var lastNotifText = ""
+    private var lastTickAt = 0L
+    private var activeMs = 0L      // tatsächlich gelaufene Zeit (ohne Pausen)
+    private var recorded = false   // verhindert doppelte Historien-Einträge
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -105,6 +108,9 @@ class TimerService : Service() {
         index = 0
         paused = false
         changeCount = 0
+        activeMs = 0
+        recorded = false
+        lastTickAt = SystemClock.elapsedRealtime()
         enterPhase(0, announce = false)
         acquireWakeLock()
         startForegroundCompat(buildNotification())
@@ -128,8 +134,11 @@ class TimerService : Service() {
     }
 
     private fun tick() {
-        if (paused) return
         val now = SystemClock.elapsedRealtime()
+        val dt = now - lastTickAt
+        lastTickAt = now
+        if (paused) return
+        activeMs += dt
         var remaining = phaseEndsAt - now
         if (remaining <= 0) {
             val nextIdx = index + 1
@@ -190,6 +199,7 @@ class TimerService : Service() {
 
     private fun finishWorkout() {
         loop?.cancel()
+        recordHistory(completed = true)
         feedback.finish(storage.soundOn, storage.vibrationOn)
         index = phases.lastIndex
         changeCount++
@@ -201,10 +211,33 @@ class TimerService : Service() {
 
     private fun stopAll() {
         loop?.cancel()
+        if (phases.isNotEmpty()) recordHistory(completed = false)
         TimerHolder.set(null)
         releaseWakeLock()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    /** Schreibt das Training in die Historie. Abbrüche unter 30 s Laufzeit werden ignoriert. */
+    private fun recordHistory(completed: Boolean) {
+        val w = workout ?: return
+        if (recorded || phases.isEmpty()) return
+        val seconds = (activeMs / 1000).toInt()
+        if (!completed && seconds < MIN_HISTORY_SECONDS) return
+        recorded = true
+        val totalMs = (suffixMs[0] + phases[0].seconds * 1000L).coerceAtLeast(1)
+        val percent = if (completed) 100 else {
+            val left = suffixMs[index] + currentRemaining()
+            (((totalMs - left) * 100) / totalMs).toInt().coerceIn(0, 99)
+        }
+        val p = phases[index]
+        storage.addHistory(
+            HistoryEntry(
+                endedAt = System.currentTimeMillis(), workoutId = w.id, name = w.name, completed = completed,
+                sets = w.sets, intervals = w.intervals, trainedSeconds = seconds, plannedSeconds = w.totalSeconds,
+                progressPercent = percent, set = p.set, interval = p.interval,
+            ),
+        )
     }
 
     private fun publish(finished: Boolean, remaining: Long = currentRemaining()) {
@@ -306,6 +339,7 @@ class TimerService : Service() {
     }
 
     companion object {
+        private const val MIN_HISTORY_SECONDS = 30
         private const val CHANNEL = "timer"
         private const val NOTIF_ID = 42
         const val ACTION_START = "de.intervaltimer.START"

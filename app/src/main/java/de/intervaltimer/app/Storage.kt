@@ -20,6 +20,30 @@ class Storage(context: Context) {
         prefs.edit().putString("workouts", arr.toString()).apply()
     }
 
+    fun loadHistory(): List<HistoryEntry> {
+        val raw = prefs.getString("history", null) ?: return emptyList()
+        return runCatching {
+            val arr = JSONArray(raw)
+            (0 until arr.length()).map { HistoryEntry.fromJson(arr.getJSONObject(it)) }
+        }.getOrDefault(emptyList()).sortedByDescending { it.endedAt }
+    }
+
+    private fun saveHistory(list: List<HistoryEntry>) {
+        val arr = JSONArray()
+        list.forEach { arr.put(it.toJson()) }
+        prefs.edit().putString("history", arr.toString()).apply()
+    }
+
+    fun addHistory(e: HistoryEntry) {
+        saveHistory((listOf(e) + loadHistory()).take(HISTORY_LIMIT))
+    }
+
+    fun deleteHistory(endedAt: Long) {
+        saveHistory(loadHistory().filterNot { it.endedAt == endedAt })
+    }
+
+    fun clearHistory() = prefs.edit().remove("history").apply()
+
     var soundOn: Boolean
         get() = prefs.getBoolean("sound", true)
         set(v) = prefs.edit().putBoolean("sound", v).apply()
@@ -27,6 +51,10 @@ class Storage(context: Context) {
     var vibrationOn: Boolean
         get() = prefs.getBoolean("vibration", true)
         set(v) = prefs.edit().putBoolean("vibration", v).apply()
+
+    companion object {
+        const val HISTORY_LIMIT = 500
+    }
 
     private fun seed(): List<Workout> = listOf(
         Workout(

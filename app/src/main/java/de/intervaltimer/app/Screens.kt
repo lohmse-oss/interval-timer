@@ -95,6 +95,7 @@ private fun Stat(icon: ImageVector, text: String) {
 fun HomeScreen(
     workouts: List<Workout>,
     onStart: (Workout) -> Unit,
+    onHistory: () -> Unit,
     onEdit: (Workout) -> Unit,
     onNew: () -> Unit,
     onDuplicate: (Workout) -> Unit,
@@ -126,10 +127,11 @@ fun HomeScreen(
                         contentAlignment = Alignment.Center,
                     ) { Icon(Ico.Timer, null, Modifier.size(28.dp), tint = Color.White) }
                     Spacer(Modifier.width(14.dp))
-                    Column {
+                    Column(Modifier.weight(1f)) {
                         Text("Intervall-Timer", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
-                        Text("Tippe ein Training an, um zu starten.", fontSize = 14.sp, color = Palette.TextDim)
+                        Text("Zum Starten antippen.", fontSize = 14.sp, color = Palette.TextDim)
                     }
+                    IconButton(onClick = onHistory) { Icon(Ico.History, "Verlauf", Modifier.size(28.dp)) }
                 }
             }
             items(workouts, key = { it.id }) { w ->

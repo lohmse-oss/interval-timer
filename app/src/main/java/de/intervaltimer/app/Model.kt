@@ -119,3 +119,33 @@ fun formatTime(totalSeconds: Int): String {
     val s = totalSeconds.coerceAtLeast(0)
     return "%d:%02d".format(s / 60, s % 60)
 }
+
+/** Ein abgeschlossenes oder abgebrochenes Training in der Historie. */
+data class HistoryEntry(
+    val endedAt: Long,          // Epoch-Millisekunden, dient auch als ID
+    val workoutId: Long,
+    val name: String,           // Kopie des Namens, damit die Historie nach Umbenennen/Löschen stimmt
+    val completed: Boolean,
+    val sets: Int,
+    val intervals: Int,
+    val trainedSeconds: Int,    // tatsächlich trainierte Zeit ohne Pausen des Timers
+    val plannedSeconds: Int,
+    val progressPercent: Int,   // 100 bei fertig
+    val set: Int,               // bei Abbruch: erreichter Satz (0 = Vorbereitung)
+    val interval: Int,          // bei Abbruch: erreichtes Intervall (0 = keins)
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("t", endedAt); put("wid", workoutId); put("name", name); put("done", completed)
+        put("sets", sets); put("ints", intervals); put("sec", trainedSeconds); put("plan", plannedSeconds)
+        put("pct", progressPercent); put("set", set); put("int", interval)
+    }
+
+    companion object {
+        fun fromJson(o: JSONObject) = HistoryEntry(
+            endedAt = o.getLong("t"), workoutId = o.optLong("wid"), name = o.optString("name"),
+            completed = o.optBoolean("done"), sets = o.optInt("sets", 1), intervals = o.optInt("ints", 1),
+            trainedSeconds = o.optInt("sec"), plannedSeconds = o.optInt("plan"),
+            progressPercent = o.optInt("pct"), set = o.optInt("set"), interval = o.optInt("int"),
+        )
+    }
+}
