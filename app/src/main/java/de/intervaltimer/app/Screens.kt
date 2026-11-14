@@ -220,7 +220,9 @@ fun EditorScreen(initial: Workout, onSave: (Workout) -> Unit, onCancel: () -> Un
             Text("Ablauf", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             NumberField("Sätze", w.sets, { w = w.copy(sets = it) }, min = 1, max = 99)
             NumberField("Intervalle pro Satz", w.intervals, { w = w.copy(intervals = it) }, min = 1, max = 999)
-            NumberField("Pause zwischen Sätzen (s)", w.setRestSeconds, { w = w.copy(setRestSeconds = it) })
+            if (w.sets > 1) {
+                NumberField("Pause zwischen Sätzen (s)", w.setRestSeconds, { w = w.copy(setRestSeconds = it) })
+            }
             NumberField("Vorbereitung (s)", w.prepSeconds, { w = w.copy(prepSeconds = it) })
             NumberField("Cooldown am Ende (s)", w.cooldownSeconds, { w = w.copy(cooldownSeconds = it) })
             NumberField("Countdown-Piepser (letzte s)", w.countdownSeconds, { w = w.copy(countdownSeconds = it) }, max = 30)
